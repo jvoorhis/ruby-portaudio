@@ -1,0 +1,18 @@
+= PortAudio
+
+Author:: Jeremy Voorhis
+Copyright:: Copyright (c) 2009 Jeremy Voorhis
+License:: BSD 3-clause (see LICENSE)
+
+This package contains Ruby bindings to the PortAudio api. PortAudio is a cross-
+platform interface to your audio hardware.
+
+Although Ruby is too slow for realtime audio computation, these bindings make
+it possible to write controllers for the PortAudio system. Audio computation
+may be accomplished by supplying a callback function pointer obtained via
+Ruby's FFI, or even generated with the author's LLVM bindings at
+<http://github.com/jvoorhis/ruby-llvm>.
+
+== Requirements
+* PortAudio, version 1.9 or better
+* Fairly complete support for Ruby's foreign function interface
