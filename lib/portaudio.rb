@@ -154,7 +154,7 @@ module PortAudio
     attach_function :Pa_WriteStream, [:pointer, :pointer, :ulong], PA_ERROR
     attach_function :Pa_GetStreamReadAvailable, [:pointer], :long
     attach_function :Pa_GetStreamWriteAvailable, [:pointer], :long
-    attach_function :Pa_GetSampleSize, [:pointer], PA_ERROR
+    attach_function :Pa_GetSampleSize, [:ulong], PA_ERROR
     attach_function :Pa_Sleep, [:long], :void
   end
   
@@ -195,6 +195,15 @@ module PortAudio
     end
   end
   module_function :invoke
+  
+  def sample_size(format)
+    status = C.Pa_GetSampleSize(C::PA_SAMPLE_FORMAT_MAP[format])
+    if status >= 0 then status
+    else
+      raise RuntimeError, PortAudio.error_text(status)
+    end
+  end
+  module_function :sample_size
   
   class Host
     def self.count
