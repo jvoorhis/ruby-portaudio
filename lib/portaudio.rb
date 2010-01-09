@@ -489,7 +489,7 @@ if __FILE__ == $0
   time = 0.0
   
   stream = PortAudio::Stream.open(
-             :sample_rate => 44100,
+             :sample_rate => sr,
              :frames => block_size,
              :output => {
                :device => PortAudio::Device.default_output,
@@ -509,7 +509,7 @@ if __FILE__ == $0
   stream.start
   
   loop do
-    (0...512).each do |i|
+    (0...block_size).each do |i|
       buffer[i] = Math.cos(time * 2 * Math::PI * 440.0) * Math.cos(time * 2 * Math::PI)
       time += step
     end
