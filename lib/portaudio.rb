@@ -427,5 +427,95 @@ module PortAudio
     def cpu_load
       C.Pa_GetStreamCpuLoad(@stream)
     end
+    
+    def read
+      raise NotImplementedError, "Stream#read is not implemented" # TODO ;)
+    end
+    
+    def write(buffer)
+      C.Pa_WriteStream(@stream, buffer.to_ptr, buffer.frames)
+    end
+    alias_method :<<, :write
   end
+  
+  # A memory buffer for interleaved PCM data
+  class SampleBuffer
+    attr_reader :channels, :format, :frames, :size
+    
+    def initialize(options = {})
+      @channels, @format, @frames = options.values_at(:channels, :format, :frames)
+      @sample_size = PortAudio.sample_size(@format)
+      @size = @sample_size * @channels * @frames
+      @buffer = FFI::MemoryPointer.new(@size)
+    end
+    
+    def dispose
+      @buffer.free
+      nil
+    end
+    
+    def to_ptr
+      @buffer
+    end
+    
+    def [](index, channel = 0)
+      offset = (index + channel) * @sample_size
+      case @format
+      when :float32
+        @buffer.get_float32(offset)
+      else
+        raise NotImplementedError, "Unsupported sample format #@format"
+      end
+    end
+    
+    def []=(index, channel = 0, sample)
+      offset = (index + channel) * @sample_size
+      case @format
+      when :float32
+        @buffer.put_float32(offset, sample)
+      else
+        raise NotImplementedError, "Unsupported sample format #@format"
+      end
+    end
+  end
+end
+
+if __FILE__ == $0
+  PortAudio.init
+  
+  block_size = 512
+  sr   = 44100
+  step = 1.0/sr
+  time = 0.0
+  
+  stream = PortAudio::Stream.open(
+             :sample_rate => 44100,
+             :frames => block_size,
+             :output => {
+               :device => PortAudio::Device.default_output,
+               :channels => 1,
+               :sample_format => :float32
+              })
+  
+  buffer = PortAudio::SampleBuffer.new(
+             :format   => :float32,
+             :channels => 1,
+             :frames   => block_size)
+  
+  playing = true
+  Signal.trap('INT') { playing = false }
+  puts "Ctrl-C to exit"
+  
+  stream.start
+  
+  loop do
+    (0...512).each do |i|
+      buffer[i] = Math.cos(time * 2 * Math::PI * 440.0) * Math.cos(time * 2 * Math::PI)
+      time += step
+    end
+    stream << buffer
+    break unless playing
+  end
+  
+  stream.stop
 end

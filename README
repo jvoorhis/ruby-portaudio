@@ -7,11 +7,17 @@ License:: BSD 3-clause (see LICENSE)
 This package contains Ruby bindings to the PortAudio api. PortAudio is a cross-
 platform interface to your audio hardware.
 
-Although Ruby is too slow for realtime audio computation, these bindings make
-it possible to write controllers for the PortAudio system. Audio computation
-may be accomplished by supplying a callback function pointer obtained via
-Ruby's FFI, or even generated with the author's LLVM bindings at
-<http://github.com/jvoorhis/ruby-llvm>.
+The ruby-portaudio package supports both PortAudio apis: blocking and
+non-blocking. The blocking API allows Ruby scripts to iteratively fill a
+sample buffer which is then written to the audio hardware (later versions will
+also support reading from a buffer). The non-blocking api allows Ruby programs
+to act as controllers for audio streams defined by an external callback
+function. Because the callback function may be run in an interrupt, it is not
+really feasible to implement one in Ruby. You can, however, write your callback
+function in a C extension, or you may build your own using LLVM or LibJIT as in
+http://github.com/jvoorhis/Motivik.
+
+See the bottom of lib/portaudio.rb for an example.
 
 == Requirements
 * PortAudio, version 1.9 or better
