@@ -445,6 +445,7 @@ module PortAudio
     def initialize(options = {})
       @channels, @format, @frames = options.values_at(:channels, :format, :frames)
       @sample_size = PortAudio.sample_size(@format)
+      @frame_size = @channels * @sample_size
       @size = @sample_size * @channels * @frames
       @buffer = FFI::MemoryPointer.new(@size)
     end
@@ -458,24 +459,35 @@ module PortAudio
       @buffer
     end
     
-    def [](index, channel = 0)
-      offset = (index + channel) * @sample_size
+    def [](frame, channel)
+      index = (channel * @sample_size) + (frame * @frame_size)
       case @format
       when :float32
-        @buffer.get_float32(offset)
+        @buffer.get_float32(index)
       else
-        raise NotImplementedError, "Unsupported sample format #@format"
+        raise NotImplementedError, "Unsupported sample format #{@format}"
       end
     end
     
-    def []=(index, channel = 0, sample)
-      offset = (index + channel) * @sample_size
+    def []=(frame, channel, sample)
+      index = (channel * @sample_size) + (frame * @frame_size)
       case @format
       when :float32
-        @buffer.put_float32(offset, sample)
+        @buffer.put_float32(index, sample)
       else
-        raise NotImplementedError, "Unsupported sample format #@format"
+        raise NotImplementedError, "Unsupported sample format #{@format}"
       end
+    end
+    
+    def fill
+      samples = []
+      for frame in 0 ... @frames
+        for channel in 0 ... @channels
+          samples << yield(frame, channel)
+        end
+      end
+      @buffer.put_array_of_float32(0, samples)
+      self
     end
   end
 end
@@ -483,7 +495,7 @@ end
 if __FILE__ == $0
   PortAudio.init
   
-  block_size = 512
+  block_size = 1024
   sr   = 44100
   step = 1.0/sr
   time = 0.0
@@ -509,11 +521,11 @@ if __FILE__ == $0
   stream.start
   
   loop do
-    (0...block_size).each do |i|
-      buffer[i] = Math.cos(time * 2 * Math::PI * 440.0) * Math.cos(time * 2 * Math::PI)
+    stream << buffer.fill { |frame, channel|
       time += step
-    end
-    stream << buffer
+      Math.cos(time * 2 * Math::PI * 440.0) * Math.cos(time * 2 * Math::PI)
+    }
+    
     break unless playing
   end
   
