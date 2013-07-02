@@ -82,6 +82,7 @@ module PortAudio
         end
         params[:channel_count] = options[:channels]
         params[:sample_format] = C::PA_SAMPLE_FORMAT_MAP[options[:sample_format]]
+        params[:suggested_latency] = options[:suggested_latency] if options[:suggested_latency]
         params
       end
     end
@@ -357,10 +358,10 @@ module PortAudio
       end
 
       sample_rate = options[:sample_rate]
-      frames    = options[:frames]    || C::PA_FRAMES_PER_BUFFER_UNSPECIFIED
-      flags     = options[:flags]     || C::PA_NO_FLAG
-      callbackp = options[:callback]  || FFI::Pointer.new(0) # default: blocking mode
-      user_data = options[:user_data] || FFI::Pointer.new(0)
+      frames      = options[:frames]    || C::PA_FRAMES_PER_BUFFER_UNSPECIFIED
+      flags       = options[:flags]     || C::PA_NO_FLAG
+      callbackp   = options[:callback]  || FFI::Pointer.new(0) # default: blocking mode
+      user_data   = options[:user_data] || FFI::Pointer.new(0)
       FFI::MemoryPointer.new(:pointer) do |streamp|
         PortAudio.invoke {
           C.Pa_OpenStream(streamp,
@@ -433,7 +434,9 @@ module PortAudio
     end
 
     def write(buffer)
-      C.Pa_WriteStream(@stream, buffer.to_ptr, buffer.frames)
+      PortAudio.invoke {
+        C.Pa_WriteStream(@stream, buffer.to_ptr, buffer.frames)
+      }
     end
     alias_method :<<, :write
   end
@@ -445,9 +448,9 @@ module PortAudio
     def initialize(options = {})
       @channels, @format, @frames = options.values_at(:channels, :format, :frames)
       @sample_size = PortAudio.sample_size(@format)
-      @frame_size = @channels * @sample_size
-      @size = @sample_size * @channels * @frames
-      @buffer = FFI::MemoryPointer.new(@size)
+      @frame_size  = @channels * @sample_size
+      @size        = @frame_size * @frames
+      @buffer      = FFI::MemoryPointer.new(@size)
     end
 
     def dispose
@@ -459,34 +462,13 @@ module PortAudio
       @buffer
     end
 
-    def [](frame, channel)
-      index = (channel * @sample_size) + (frame * @frame_size)
-      case @format
-      when :float32
-        @buffer.get_float32(index)
-      else
-        raise NotImplementedError, "Unsupported sample format #{@format}"
-      end
-    end
-
-    def []=(frame, channel, sample)
-      index = (channel * @sample_size) + (frame * @frame_size)
-      case @format
-      when :float32
-        @buffer.put_float32(index, sample)
-      else
-        raise NotImplementedError, "Unsupported sample format #{@format}"
-      end
-    end
-
     def fill
-      samples = []
-      for frame in 0 ... @frames
-        for channel in 0 ... @channels
-          samples << yield(frame, channel)
+      (0...@frames).each do |frame|
+        (0...@channels).each do |channel|
+          index = (channel * @sample_size) + (frame * @frame_size)
+          @buffer.put_float32(index, yield(frame, channel))
         end
       end
-      @buffer.put_array_of_float32(0, samples)
       self
     end
   end
@@ -495,26 +477,26 @@ end
 if __FILE__ == $0
   PortAudio.init
 
-  block_size = 1024
-  sr   = 44100
-  step = 1.0/sr
-  time = 0.0
+  frames   = 1024
+  channels = 1
+  sr       = 44100
+  step     = 1.0/sr
+  time     = 0.0
+  stream   = PortAudio::Stream.open(
+               :sample_rate => sr,
+               :frames      => frames,
+               :output      => {
+                 :device            => PortAudio::Device.default_output,
+                 :channels          => channels,
+                 :sample_format     => :float32,
+                 :suggested_latency => 0.05
+               })
+  buffer   = PortAudio::SampleBuffer.new(
+               :format   => :float32,
+               :channels => channels,
+               :frames   => frames)
+  playing  = true
 
-  stream = PortAudio::Stream.open(
-             :sample_rate => sr,
-             :frames => block_size,
-             :output => {
-               :device => PortAudio::Device.default_output,
-               :channels => 1,
-               :sample_format => :float32
-              })
-
-  buffer = PortAudio::SampleBuffer.new(
-             :format   => :float32,
-             :channels => 1,
-             :frames   => block_size)
-
-  playing = true
   Signal.trap('INT') { playing = false }
   puts "Ctrl-C to exit"
 
@@ -525,7 +507,6 @@ if __FILE__ == $0
       time += step
       Math.cos(time * 2 * Math::PI * 440.0) * Math.cos(time * 2 * Math::PI)
     }
-
     break unless playing
   end
 
